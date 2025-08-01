@@ -504,17 +504,54 @@ class CryptoVektorProBot:
         
         logger.info("Bot started successfully!")
         
-        # Запускаем бота
-        await self.app.run_polling(allowed_updates=Update.ALL_TYPES)
+        try:
+            # Запускаем бота
+            await self.app.run_polling(allowed_updates=Update.ALL_TYPES)
+        except Exception as e:
+            logger.error(f"Error during polling: {e}")
+        finally:
+            # Останавливаем планировщик при завершении
+            if self.notification_manager:
+                self.notification_manager.stop_scheduler()
+            logger.info("Bot stopped")
 
 async def main():
     """Главная функция"""
     bot = CryptoVektorProBot()
     await bot.run()
 
+def start_bot():
+    """Запуск бота с обработкой event loop"""
+    try:
+        # Попробуем использовать asyncio.run()
+        asyncio.run(main())
+    except RuntimeError as e:
+        if "cannot be called from a running event loop" in str(e):
+            # Если event loop уже запущен, создаем новый
+            logger.info("Creating new event loop...")
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(main())
+            finally:
+                loop.close()
+        else:
+            raise e
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        # Последняя попытка с новым event loop
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(main())
+            loop.close()
+        except Exception as final_error:
+            logger.error(f"Final error: {final_error}")
+            raise
+
 if __name__ == '__main__':
     try:
-        asyncio.run(main())
+        start_bot()
     except KeyboardInterrupt:
         logger.info("Bot stopped by user")
     except Exception as e:
